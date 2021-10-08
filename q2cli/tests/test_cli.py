@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright (c) 2016-2019, QIIME 2 development team.
+# Copyright (c) 2016-2021, QIIME 2 development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
@@ -8,8 +8,11 @@
 
 import os.path
 import unittest
+import unittest.mock
 import tempfile
 import shutil
+import click
+import errno
 
 from click.testing import CliRunner
 from qiime2 import Artifact, Visualization
@@ -19,6 +22,7 @@ from qiime2.core.testing.util import get_dummy_plugin
 from q2cli.builtin.info import info
 from q2cli.builtin.tools import tools
 from q2cli.commands import RootCommand
+from q2cli.click.type import QIIME2Type
 
 
 class CliTests(unittest.TestCase):
@@ -282,6 +286,96 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.exit_code, 1)
         self.assertIn('Traceback (most recent call last)', result.output)
 
+    def test_input_conversion(self):
+        obj = QIIME2Type(IntSequence1.to_ast(), repr(IntSequence1))
+
+        with self.assertRaisesRegex(click.exceptions.BadParameter,
+                                    f'{self.tempdir!r} is not a QIIME 2 '
+                                    'Artifact'):
+            obj._convert_input(self.tempdir, None, None)
+
+        with self.assertRaisesRegex(click.exceptions.BadParameter,
+                                    "'x' is not a valid filepath"):
+            obj._convert_input('x', None, None)
+
+        # This is to ensure the temp in the regex matches the temp used in the
+        # method under test in type.py
+        temp = tempfile.tempdir
+        with unittest.mock.patch('qiime2.sdk.Result.load',
+                                 side_effect=OSError(errno.ENOSPC,
+                                                     'No space left on '
+                                                     'device')):
+            with self.assertRaisesRegex(click.exceptions.BadParameter,
+                                        f'{temp!r}.*'
+                                        f'{self.artifact1_path!r}.*'
+                                        f'{temp!r}'):
+                obj._convert_input(self.artifact1_path, None, None)
+
+    def test_syntax_error_in_env(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+
+        viz_path = os.path.join(self.tempdir, 'viz')
+
+        with unittest.mock.patch('qiime2.sdk.Result.load',
+                                 side_effect=SyntaxError):
+            result = self.runner.invoke(
+                command, ['most-common-viz', '--i-ints', self.artifact1_path,
+                          '--o-visualization', viz_path, '--verbose'])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertTrue('problem loading' in result.output)
+        self.assertTrue(self.artifact1_path in result.output)
+
+    def test_deprecated_help_text(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+
+        result = self.runner.invoke(command, ['deprecated-method', '--help'])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue('WARNING' in result.output)
+        self.assertTrue('deprecated' in result.output)
+
+    def test_run_deprecated_gets_warning_msg(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+        output_path = os.path.join(self.tempdir, 'output.qza')
+
+        result = self.runner.invoke(
+            command,
+            ['deprecated-method', '--o-out', output_path, '--verbose'])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertTrue(os.path.exists(output_path))
+
+        artifact = Artifact.load(output_path)
+
+        # Just make sure that the command ran as expected
+        self.assertEqual(artifact.view(dict), {'foo': '43'})
+
+        self.assertTrue('deprecated' in result.output)
+
+    def test_examples(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+        result = self.runner.invoke(
+            command, ['typical-pipeline', '--examples']
+        )
+        self.assertEqual(result.exit_code, 0)
+
+    def test_no_examples(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+        result = self.runner.invoke(
+            command, ['unioned-primitives', '--examples']
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            result.output,
+            "No examples have been registered for this action yet.\n"
+        )
+
 
 class TestOptionalArtifactSupport(unittest.TestCase):
     def setUp(self):
@@ -415,7 +509,7 @@ class TestMetadataSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-file\"", result.output)
+        self.assertIn("Missing option '--m-metadata-file'", result.output)
 
     def test_optional_metadata_missing(self):
         result = self._run_command(
@@ -499,7 +593,7 @@ class TestMetadataColumnSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-file\"", result.output)
+        self.assertIn("Missing option '--m-metadata-file'", result.output)
 
     def test_optional_metadata_missing(self):
         result = self._run_command(
@@ -517,7 +611,7 @@ class TestMetadataColumnSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-column\"", result.output)
+        self.assertIn("Missing option '--m-metadata-column'", result.output)
 
     def test_optional_column_without_metadata(self):
         result = self._run_command(
@@ -527,7 +621,7 @@ class TestMetadataColumnSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-file\"", result.output)
+        self.assertIn("Missing option '--m-metadata-file'", result.output)
 
     def test_single_metadata(self):
         for command in ('identity-with-metadata-column',

@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright (c) 2016-2019, QIIME 2 development team.
+# Copyright (c) 2016-2021, QIIME 2 development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
@@ -255,11 +255,9 @@ class DeploymentCache:
         import qiime2.sdk.usage as usage
 
         use = q2cli.core.usage.CLIUsageFormatter()
-        scope = usage.Scope()
-        with use.bind(scope):
-            for example in action.examples:
-                example(use)
-                use._lines.append('')
+        for example in action.examples:
+            example(use)
+            use._lines.append('')
 
         lines = use.get_result()
         return lines
