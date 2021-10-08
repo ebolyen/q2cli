@@ -1,6 +1,5 @@
 {% set data = load_setup_py_data() %}
 {% set version = data.get('version') or 'placehold' %}
-{% set release = '.'.join(version.split('.')[:2]) %}
 
 package:
   name: q2cli
@@ -22,10 +21,14 @@ requirements:
   run:
     - python  {{ python }}
     - pip
-    - click
-    - qiime2 {{ release }}.*
+    - click >=7,<8
+    - qiime2 {{ qiime2_epoch }}.*
 
 test:
+  requires:
+    - qiime2 >={{ qiime2 }}
+    - pytest
+
   imports:
     - q2cli
 

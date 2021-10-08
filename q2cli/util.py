@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright (c) 2016-2019, QIIME 2 development team.
+# Copyright (c) 2016-2021, QIIME 2 development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
@@ -34,6 +34,10 @@ def get_completion_path():
 
 def to_cli_name(name):
     return name.replace('_', '-')
+
+
+def to_snake_case(name):
+    return name.replace('-', '_')
 
 
 def exit_with_error(e, header='An error has been encountered:',

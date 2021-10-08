@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# Copyright (c) 2016-2019, QIIME 2 development team.
+# Copyright (c) 2016-2021, QIIME 2 development team.
 #
 # Distributed under the terms of the Modified BSD License.
 #
@@ -311,6 +311,22 @@ class CliTests(unittest.TestCase):
                                         f'{temp!r}'):
                 obj._convert_input(self.artifact1_path, None, None)
 
+    def test_syntax_error_in_env(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+
+        viz_path = os.path.join(self.tempdir, 'viz')
+
+        with unittest.mock.patch('qiime2.sdk.Result.load',
+                                 side_effect=SyntaxError):
+            result = self.runner.invoke(
+                command, ['most-common-viz', '--i-ints', self.artifact1_path,
+                          '--o-visualization', viz_path, '--verbose'])
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertTrue('problem loading' in result.output)
+        self.assertTrue(self.artifact1_path in result.output)
+
     def test_deprecated_help_text(self):
         qiime_cli = RootCommand()
         command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
@@ -339,6 +355,26 @@ class CliTests(unittest.TestCase):
         self.assertEqual(artifact.view(dict), {'foo': '43'})
 
         self.assertTrue('deprecated' in result.output)
+
+    def test_examples(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+        result = self.runner.invoke(
+            command, ['typical-pipeline', '--examples']
+        )
+        self.assertEqual(result.exit_code, 0)
+
+    def test_no_examples(self):
+        qiime_cli = RootCommand()
+        command = qiime_cli.get_command(ctx=None, name='dummy-plugin')
+        result = self.runner.invoke(
+            command, ['unioned-primitives', '--examples']
+        )
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            result.output,
+            "No examples have been registered for this action yet.\n"
+        )
 
 
 class TestOptionalArtifactSupport(unittest.TestCase):
@@ -473,7 +509,7 @@ class TestMetadataSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-file\"", result.output)
+        self.assertIn("Missing option '--m-metadata-file'", result.output)
 
     def test_optional_metadata_missing(self):
         result = self._run_command(
@@ -557,7 +593,7 @@ class TestMetadataColumnSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-file\"", result.output)
+        self.assertIn("Missing option '--m-metadata-file'", result.output)
 
     def test_optional_metadata_missing(self):
         result = self._run_command(
@@ -575,7 +611,7 @@ class TestMetadataColumnSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-column\"", result.output)
+        self.assertIn("Missing option '--m-metadata-column'", result.output)
 
     def test_optional_column_without_metadata(self):
         result = self._run_command(
@@ -585,7 +621,7 @@ class TestMetadataColumnSupport(MetadataTestsBase):
 
         self.assertEqual(result.exit_code, 1)
         self.assertTrue(result.output.startswith('Usage:'))
-        self.assertIn("Missing option \"--m-metadata-file\"", result.output)
+        self.assertIn("Missing option '--m-metadata-file'", result.output)
 
     def test_single_metadata(self):
         for command in ('identity-with-metadata-column',
